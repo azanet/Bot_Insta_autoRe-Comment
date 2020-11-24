@@ -1,0 +1,172 @@
+#!/bin/bash
+
+#####################################
+##  -KrazyLab_Simple_Bot_Comment-  ##
+##                                 ##
+##     by Azanet  for  KrazyLab    ##
+##    https://github.com/azanet/   ##
+#####################################
+##Tested in Instagram
+
+echo "Iniciando KrazyLab_Simple_Bot_Comment..."
+echo ""
+
+
+
+##VARIABLES DE VALORES REFERENCIA, NO es aconsejable ni necesario tocarlas
+VcountInicio=0 #Establece el contador a 0
+CinitLimitCount=4 #Establecemos un valor DEFAULT para contador que RESETA los VALORES a los ingresados por el usuario
+Tinicio=31 #Establecemos un valor DEFAULT para las peticiones '200'(Satisfactorias)
+TBaninicio=35 #Establecemos un valor DEFAULT para las peticiones '4XX'(Baneado)
+TincrementInicio=3 #Establecemos un valor DEFAULT para el incremento en SEGUNDOS de las peticiones
+
+
+count=$VcountInicio #Contador establecido a 0 usando variable de inicio
+auxOldCode=0 #Da un valor inicial a la variable que no tomará valor real hasta el final del primer bucle
+
+sleep 1
+
+#######################################################################################
+##Solicitamos si se desean poner valores de Espera personalizados entre peticiones '200'
+read -p "Introduzca Segundos de espera entre Peticiones '200' (Satisfactorias) [default $(echo $Tinicio)seg.]: " inputUser
+##Si se deja vacío, tomará el valor 'Tinicio' que está establecido, en caso contrario, esta misma será sobreescrita al valor indicado 
+if [ -n "$inputUser" ];then
+   Tinicio=$inputUser 
+fi
+segBuena=$Tinicio
+echo "ESTABLECIDOS [+$(echo $segBuena)seg.] de Espera entre peticiones '200'"
+echo ""
+
+
+#######################################################################################
+#Solicitamos si se desean poner valores de Espera personalizados entre peticiones '4XX'
+read -p "Introduzca Segundos de espera entre Peticiones '4XX' (Baneado) [default $(echo $TBaninicio)seg.]: " inputBan
+##Si se deja vacío, tomará el valor 'TBaninicio' que está establecido, en caso contrario, esta misma será sobreescrita al valor indicado 
+if [ -n "$inputBan" ];then
+   TBaninicio=$inputBan 
+fi
+segCastigo=$TBaninicio
+echo "ESTABLECIDOS [+$(echo $segCastigo)seg.] de Espera entre peticiones '4XX'"
+echo ""
+
+
+
+#######################################################################################
+#Solicitamos si se desean poner valores de INCREMENTO de SEGUNDOS personalizados al recibir errores '4XX'
+read -p "Introduzca los Segundos a incrementar el DELAY de las peticiones '200' al recibir errores '429' (Baneado) [default $(echo $TincrementInicio)seg.]: " inputIncDelay
+##Si se deja vacío, tomará el valor 'TincrementInicio' que está establecido, en caso contrario, esta misma será sobreescrita al valor indicado 
+if [ -n "$inputIncDelay" ];then
+   TincrementInicio=$inputIncDelay 
+fi
+segundosIncrement=$TincrementInicio
+echo "ESTABLECIDOS [+$(echo $segundosIncrement)seg.] de incremento de DELAY entre peticiones '200'"
+echo ""
+
+
+#######################################################################################
+#Solicitamos si se desean poner valores de INCREMENTO de SEGUNDOS personalizados al recibir errores '4XX'
+read -p "Introduzca la cantidad de veces máxima que debe incrementarse el DELAY de peticiones '200' antes reestablecerse a los valores iniciales Introducidos [default $(echo $CinitLimitCount)]: " inputLimitCount
+##Si se deja vacío, tomará el valor 'TincrementInicio' que está establecido, en caso contrario, esta misma será sobreescrita al valor indicado 
+if [ -n "$inputLimitCount" ];then
+   CinitLimitCount=$inputLimitCount
+fi
+limiteCount=$CinitLimitCount
+echo "ESTABLECIDOS a [$(echo $limiteCount)] las veces a incrementar el DELAY entre peticiones '200' antes de reinicialo"
+echo ""
+
+
+
+########################################################################
+##Solicitando peticion cURL que contiene el comentario para replicarlo
+##Si no se introduce NADA, provocaremos la finalización del script
+read -p "Introduzca Peticion cURL a realizar: " inputQuery
+if [ -z "$inputQuery" ];then
+    echo "No puede dejarse la 'Petición cURL' VACIA. SALIENDO..."
+    exit 0
+fi
+peticion=$inputQuery 
+
+echo ""
+
+
+while true;do
+
+ 
+  echo ""
+  echo "Lanzando Petición: .................."
+
+  #Montando el comando para poder recoger SOLO el CODIGO DE RESPUESTA con el que responda la WEB
+  result=$( bash -c "$peticion" | awk 'NR==1' | awk '{print $2}')
+
+ 
+   
+  #echo "Codigo resultante de la petición $result"
+  
+##COMPROBANDO qué codigo hemos Obtenido de la petición realizada, y en función de este Actuará...
+    
+  ##Si hemos OBTENIDO un codigo '429' será porque nos han baneado temporalmente, 
+  ##Incrementaremos los segundos entre petición y petición '200' para intentar evitar que esto vuelva a ocurrir
+  ##En caso de recibir muchos baneos(NO CONSECUTIVOS), se ha activado un contador que nos valdrá como tope para indicarle 
+  ##cuantas veces estamos dispuestos a incrementar el tiempo entre nuestras peticiones '200' antes de 
+  ##devolver a las variables 'contador' y 'segBuena' a su valor inicial.
+  if [ "$result" = "429" ];then    
+    echo "Result 429 ==> Petición FAIL."
+    echo "BANEO DETECTADO, determinando acción a tomar..."
+        
+    ##Comprobando si es un baneo nuevo o Existente (En caso de repetirse el Error 4XX)
+    ##Si es nuevo, accedemos a modificar el DELAY de nuestras peticiones '200'
+    if [ "$auxOldCode" != "$result" ];then
+        ##Incrementamos contador
+        count=$(expr $count + 1)
+        ##Comprobamos si contador ha llegado al LIMITE, si es así resetamos.
+        if [ $count -eq $limiteCount ];then
+            echo "!!==>Contador excedido.RESETEANDO VARIABLES"
+            count=$VcountInicio
+            segBuena=$Tinicio
+        
+        ##Si no ha llegado al LIMITE, Incrementamos DELAY 
+        else
+            echo "!==> Aumentando DELAY entre peticiones '200' +$segundosIncrement seg " 
+            echo "??==> Tiempo anterior [$segBuena]seg."
+            segBuena=$(expr $segBuena + $segundosIncrement)
+
+        fi    
+        echo "???==> NUEVO Delay para peticiones '200' [$segBuena]seg. "
+    
+    ##Si seguimos en el mismo baneo, no incrementaremos el tiempo entre peticiones
+    else
+        echo "!!==>El baneo continua.. NO se incrementará Delay entre peticiones '200'"
+    fi
+    echo""
+    echo "!!!!==>Esperando $segCastigo segundos para Evitar 'BANEO' "
+    sleep $segCastigo
+
+   
+  ##En caso de OBTENER un CÓDIGO '200', esperamos y enviamos otra petición
+  elif [ "$result" = "200" ];then
+    echo "Result 200 => Petición satisfactoria."
+    echo "esperando $segBuena segundos"         
+    sleep $segBuena
+
+
+  ##En caso de OBTENER un CÓDIGO '400', esperamos y enviamos otra petición
+  elif [ "$result" = "400" ];then
+    echo "Result 400 => Petición FAIL."
+    echo "Unable to post comment."
+    echo "!!!!==>Esperando $segCastigo segundos para Evitar 'Unable to post comment.' "
+    sleep $segCastigo
+
+  ##En caso de OBTENER un CÓDIGO 'DESCONOCIDO' (no contemplado), saldremos del programa   
+  else
+    echo "Codigo de error No contemplado [$result]."
+    echo "Saliendo del programa...Por Seguridad."
+    exit 0
+  
+  fi
+
+  #Establecemos 'auxOldCode' al valor de code para utilizarla en el IF del error 4XX en caso de ser necesario    
+  auxOldCode=$result 
+  echo ""
+
+done
+
